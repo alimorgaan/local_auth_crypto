@@ -42,6 +42,16 @@ object CryptoHelper {
     }
 
     fun encrypt(plainText: String, allowDeviceCredential: Boolean): String {
+        return try {
+            encryptInternal(plainText, allowDeviceCredential)
+        } catch (e: Exception) {
+            // Stale key from previous config — delete and retry
+            deleteKey(allowDeviceCredential)
+            encryptInternal(plainText, allowDeviceCredential)
+        }
+    }
+
+    private fun encryptInternal(plainText: String, allowDeviceCredential: Boolean): String {
         val key = getOrCreateKey(allowDeviceCredential)
         val cipher = Cipher.getInstance(TRANSFORMATION)
         cipher.init(Cipher.ENCRYPT_MODE, key)
@@ -53,6 +63,16 @@ object CryptoHelper {
     }
 
     fun getDecryptCipher(cipherText: String, allowDeviceCredential: Boolean): Pair<Cipher, ByteArray> {
+        return try {
+            getDecryptCipherInternal(cipherText, allowDeviceCredential)
+        } catch (e: Exception) {
+            // Stale key from previous config — delete and retry
+            deleteKey(allowDeviceCredential)
+            getDecryptCipherInternal(cipherText, allowDeviceCredential)
+        }
+    }
+
+    private fun getDecryptCipherInternal(cipherText: String, allowDeviceCredential: Boolean): Pair<Cipher, ByteArray> {
         val parts = cipherText.split(":")
         if (parts.size != 2) throw IllegalArgumentException("Invalid ciphertext format")
         val iv = Base64.decode(parts[0], Base64.NO_WRAP)
@@ -71,5 +91,12 @@ object CryptoHelper {
     fun decryptFromCipherText(cipherText: String, allowDeviceCredential: Boolean): String {
         val (cipher, encrypted) = getDecryptCipher(cipherText, allowDeviceCredential)
         return decrypt(cipher, encrypted)
+    }
+
+    private fun deleteKey(allowDeviceCredential: Boolean) {
+        val alias = getKeyAlias(allowDeviceCredential)
+        val keyStore = KeyStore.getInstance(ANDROID_KEYSTORE)
+        keyStore.load(null)
+        keyStore.deleteEntry(alias)
     }
 }
