@@ -1,6 +1,5 @@
 package com.prongbang.local_auth_crypto
 
-import android.os.Build
 import android.security.keystore.KeyGenParameterSpec
 import android.security.keystore.KeyProperties
 import android.util.Base64
@@ -36,31 +35,6 @@ object CryptoHelper {
             .setBlockModes(KeyProperties.BLOCK_MODE_GCM)
             .setEncryptionPaddings(KeyProperties.ENCRYPTION_PADDING_NONE)
             .setKeySize(256)
-            .setUserAuthenticationRequired(true)
-
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
-            builder.setInvalidatedByBiometricEnrollment(true)
-        }
-
-        if (allowDeviceCredential) {
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
-                builder.setUserAuthenticationParameters(
-                    0,
-                    KeyProperties.AUTH_BIOMETRIC_STRONG or KeyProperties.AUTH_DEVICE_CREDENTIAL
-                )
-            } else {
-                // Pre-API 30: use time-based validity for credential fallback
-                @Suppress("DEPRECATION")
-                builder.setUserAuthenticationValidityDurationSeconds(30)
-            }
-        } else {
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
-                builder.setUserAuthenticationParameters(0, KeyProperties.AUTH_BIOMETRIC_STRONG)
-            } else {
-                @Suppress("DEPRECATION")
-                builder.setUserAuthenticationValidityDurationSeconds(-1)
-            }
-        }
 
         val keyGenerator = KeyGenerator.getInstance(KeyProperties.KEY_ALGORITHM_AES, ANDROID_KEYSTORE)
         keyGenerator.init(builder.build())
