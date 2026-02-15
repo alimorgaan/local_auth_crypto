@@ -7,4 +7,5 @@ object LocalAuthArgs {
     const val BIO_SUBTITLE = "subtitle"
     const val BIO_DESCRIPTION = "description"
     const val BIO_NEGATIVE_BUTTON = "negativeButton"
+    const val ALLOW_DEVICE_CREDENTIAL = "allowDeviceCredential"
 }

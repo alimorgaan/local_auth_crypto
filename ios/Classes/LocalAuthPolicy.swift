@@ -9,17 +9,23 @@ import LocalAuthentication
 
 class LocalAuthPolicy {
     
-    static func evaluatePolicy(reason: String, completion: @escaping (Bool) -> ()) {
+    static func evaluatePolicy(reason: String, allowDeviceCredential: Bool, completion: @escaping (Bool) -> ()) {
         let context = LAContext()
+        let policy: LAPolicy = allowDeviceCredential
+            ? .deviceOwnerAuthentication
+            : .deviceOwnerAuthenticationWithBiometrics
 
-        context.evaluatePolicy(.deviceOwnerAuthentication, localizedReason: reason) { (success, error) in
-            // Moves to the main thread because completion triggers UI changes
+        var error: NSError?
+        guard context.canEvaluatePolicy(policy, error: &error) else {
             DispatchQueue.main.async {
-                if success {
-                    completion(true)
-                } else {
-                    completion(false)
-                }
+                completion(false)
+            }
+            return
+        }
+
+        context.evaluatePolicy(policy, localizedReason: reason) { (success, error) in
+            DispatchQueue.main.async {
+                completion(success)
             }
         }
     }

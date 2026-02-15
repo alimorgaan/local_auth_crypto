@@ -21,20 +21,25 @@ abstract class LocalAuthCrypto {
     _instance = instance;
   }
 
-  Future<String?> encrypt(String payload) {
+  Future<String?> encrypt(
+    String payload, {
+    bool allowDeviceCredential = false,
+  }) {
     throw UnimplementedError('encrypt() has not been implemented.');
   }
 
   Future<String?> authenticate(
     BiometricPromptInfo promptInfo,
-    String cipherText,
-  ) {
+    String cipherText, {
+    bool allowDeviceCredential = false,
+  }) {
     throw UnimplementedError('authenticate() has not been implemented.');
   }
 
-  /// Android: Function will always return True
-  /// iOS: Function will return True or False
-  Future<bool?> evaluatePolicy(String reason) {
+  Future<bool?> evaluatePolicy(
+    String reason, {
+    bool allowDeviceCredential = false,
+  }) {
     throw UnimplementedError('evaluatePolicy() has not been implemented.');
   }
 }

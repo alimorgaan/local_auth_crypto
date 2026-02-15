@@ -17,6 +17,7 @@ class _MyAppState extends State<MyApp> {
   String? _biometricTokenCipherText = '';
   String? _biometricTokenPlainText = '';
   final _localAuthCrypto = LocalAuthCrypto.instance;
+  bool _allowDeviceCredential = false;
 
   @override
   void initState() {
@@ -30,7 +31,7 @@ class _MyAppState extends State<MyApp> {
     return MaterialApp(
       home: Scaffold(
         appBar: AppBar(
-          title: const Text('LOCAL AUTH PLUS'),
+          title: const Text('LOCAL AUTH CRYPTO'),
         ),
         body: SafeArea(
           child: SingleChildScrollView(
@@ -39,6 +40,24 @@ class _MyAppState extends State<MyApp> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
+                  Row(
+                    children: [
+                      const Text('Allow Device Credential'),
+                      const Spacer(),
+                      Switch(
+                        value: _allowDeviceCredential,
+                        onChanged: (value) {
+                          setState(() {
+                            _allowDeviceCredential = value;
+                            _biometricTokenCipherText = '';
+                            _biometricTokenPlainText = '';
+                          });
+                          _processEncrypt();
+                        },
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 16),
                   Text(
                     'TOKEN',
                     style: Theme.of(context).textTheme.titleLarge,
@@ -72,7 +91,9 @@ class _MyAppState extends State<MyApp> {
                           icon: const Icon(Icons.fingerprint_outlined),
                           iconSize: 80,
                         ),
-                        const Text('Decrypt by Biometric'),
+                        Text(_allowDeviceCredential
+                            ? 'Decrypt by Biometric or PIN'
+                            : 'Decrypt by Biometric'),
                       ],
                     ),
                   ),
@@ -86,7 +107,10 @@ class _MyAppState extends State<MyApp> {
   }
 
   void _processEncrypt() async {
-    _biometricTokenCipherText = await _localAuthCrypto.encrypt(_biometricToken);
+    _biometricTokenCipherText = await _localAuthCrypto.encrypt(
+      _biometricToken,
+      allowDeviceCredential: _allowDeviceCredential,
+    );
     setState(() {});
   }
 
@@ -94,18 +118,21 @@ class _MyAppState extends State<MyApp> {
     final promptInfo = BiometricPromptInfo(
       title: 'BIOMETRIC',
       subtitle: 'Please scan biometric to decrypt',
-      negativeButton: 'CANCEL',
+      negativeButton: _allowDeviceCredential ? null : 'CANCEL',
     );
     _biometricTokenPlainText = await _localAuthCrypto.authenticate(
       promptInfo,
       _biometricTokenCipherText ?? '',
+      allowDeviceCredential: _allowDeviceCredential,
     );
     setState(() {});
   }
 
   void _processCanEvaluatePolicy() async {
-    final status = await _localAuthCrypto
-        .evaluatePolicy('Allow biometric to authenticate');
+    final status = await _localAuthCrypto.evaluatePolicy(
+      'Allow biometric to authenticate',
+      allowDeviceCredential: _allowDeviceCredential,
+    );
     print('status: $status');
   }
 }

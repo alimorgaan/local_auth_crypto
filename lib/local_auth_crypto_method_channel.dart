@@ -9,19 +9,25 @@ class MethodChannelLocalAuthCrypto extends LocalAuthCrypto {
   final methodChannel = const MethodChannel('local_auth_crypto');
 
   @override
-  Future<String?> encrypt(String payload) async {
+  Future<String?> encrypt(
+    String payload, {
+    bool allowDeviceCredential = false,
+  }) async {
     return await methodChannel.invokeMethod('encrypt', {
       'payload': payload,
+      'allowDeviceCredential': allowDeviceCredential,
     });
   }
 
   @override
   Future<String?> authenticate(
     BiometricPromptInfo promptInfo,
-    String cipherText,
-  ) async {
+    String cipherText, {
+    bool allowDeviceCredential = false,
+  }) async {
     dynamic arguments = {
       'cipherText': cipherText,
+      'allowDeviceCredential': allowDeviceCredential,
     };
     if (promptInfo.title != null) {
       arguments['title'] = promptInfo.title;
@@ -39,9 +45,13 @@ class MethodChannelLocalAuthCrypto extends LocalAuthCrypto {
   }
 
   @override
-  Future<bool?> evaluatePolicy(String reason) async {
+  Future<bool?> evaluatePolicy(
+    String reason, {
+    bool allowDeviceCredential = false,
+  }) async {
     return await methodChannel.invokeMethod('evaluatePolicy', {
       'reason': reason,
+      'allowDeviceCredential': allowDeviceCredential,
     });
   }
 }

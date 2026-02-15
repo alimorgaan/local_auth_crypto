@@ -5,7 +5,7 @@
 #
 Pod::Spec.new do |s|
   s.name             = 'local_auth_crypto'
-  s.version          = '1.0.0'
+  s.version          = '2.0.0'
   s.summary          = 'Android and iOS devices to allow Local Authentication + Cryptography via Biometric.'
   s.description      = <<-DESC
 Android and iOS devices to allow Local Authentication + Cryptography via Biometric.
@@ -16,7 +16,6 @@ Android and iOS devices to allow Local Authentication + Cryptography via Biometr
   s.source           = { :path => '.' }
   s.source_files     = 'Classes/**/*'
   s.dependency       'Flutter'
-  s.dependency       'SecureBiometricSwift', '~> 0.0.2'
-  s.platform         = :ios, '11.0'
+  s.platform         = :ios, '12.0'
   s.swift_version    = ["4.0", "4.1", "4.2", "5.0", "5.1", "5.2", "5.3", "5.4", "5.5"]
 end

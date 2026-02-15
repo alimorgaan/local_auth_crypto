@@ -1,67 +1,63 @@
 import Flutter
 import UIKit
-import SecureBiometricSwift
 
 public class SwiftLocalAuthCryptoPlugin: NSObject, FlutterPlugin {
     
-    private var secureBiometricSwift: SecureBiometricSwift? = nil
-    
-    init(secureBiometricSwift: SecureBiometricSwift) {
-        self.secureBiometricSwift = secureBiometricSwift
-    }
-    
     public static func register(with registrar: FlutterPluginRegistrar) {
         let channel = FlutterMethodChannel(name: "local_auth_crypto", binaryMessenger: registrar.messenger())
-        
-        let secureBiometricSwift = LocalSecureBiometricSwift()
-        
-        let instance = SwiftLocalAuthCryptoPlugin(secureBiometricSwift: secureBiometricSwift)
+        let instance = SwiftLocalAuthCryptoPlugin()
         registrar.addMethodCallDelegate(instance, channel: channel)
     }
     
     public func handle(_ call: FlutterMethodCall, result: @escaping FlutterResult) {
-        let args = call.arguments as? Dictionary<String, String>
+        let args = call.arguments as? Dictionary<String, Any>
+        let allowDeviceCredential = args?[LocalAuthArgs.ALLOW_DEVICE_CREDENTIAL] as? Bool ?? false
         
         switch call.method {
         case LocalAuthMethod.ENCRYPT:
-            if args != nil {
-                guard let bioPayload = args![LocalAuthArgs.BIO_PAYLOAD] else {
-                    result(nil)
-                    return
-                }
-                let cipherText = secureBiometricSwift?.encrypt(plainText: bioPayload)
+            guard let args = args,
+                  let bioPayload = args[LocalAuthArgs.BIO_PAYLOAD] as? String else {
+                result(FlutterError(code: "E01", message: "Biometric token is null", details: nil))
+                return
+            }
+            do {
+                let cipherText = try CryptoHelper.encrypt(plainText: bioPayload, allowDeviceCredential: allowDeviceCredential)
                 result(cipherText)
-            } else {
-                result(nil)
+            } catch {
+                result(FlutterError(code: "E01", message: "Encryption failed: \(error)", details: nil))
             }
-            break
         case LocalAuthMethod.AUTHENTICATE:
-            if args != nil {
-                guard let bioCipherText = args![LocalAuthArgs.BIO_CIPHER_TEXT] else {
-                    result(nil)
-                    return
-                }
-                let plainText = secureBiometricSwift?.decrypt(cipherText: bioCipherText)
-                result(plainText)
-            } else {
-                result(nil)
+            guard let args = args,
+                  let bioCipherText = args[LocalAuthArgs.BIO_CIPHER_TEXT] as? String else {
+                result(FlutterError(code: "E03", message: "Cipher is null", details: nil))
+                return
             }
-            break
+            let reason = (args[LocalAuthArgs.BIO_POLICY_REASON] as? String) ?? "Authenticate to decrypt"
+            CryptoHelper.decrypt(
+                cipherText: bioCipherText,
+                allowDeviceCredential: allowDeviceCredential,
+                reason: reason
+            ) { decryptResult in
+                DispatchQueue.main.async {
+                    switch decryptResult {
+                    case .success(let plainText):
+                        result(plainText)
+                    case .failure(let error):
+                        if case CryptoHelper.CryptoError.userCancelled = error {
+                            result(FlutterError(code: "E05", message: "Authenticate is cancel", details: nil))
+                        } else {
+                            result(FlutterError(code: "E04", message: "Authenticate is error: \(error)", details: nil))
+                        }
+                    }
+                }
+            }
         case LocalAuthMethod.EVALUATE_POLICY:
-            if args != nil {
-                guard let bioPolicyReason = args![LocalAuthArgs.BIO_POLICY_REASON] else {
-                    result(nil)
-                    return
-                }
-                LocalAuthPolicy.evaluatePolicy(reason: bioPolicyReason) { (status) in
-                    result(status)
-                }
-            } else {
-                result(nil)
+            let reason = (args?[LocalAuthArgs.BIO_POLICY_REASON] as? String) ?? "Authenticate"
+            LocalAuthPolicy.evaluatePolicy(reason: reason, allowDeviceCredential: allowDeviceCredential) { (status) in
+                result(status)
             }
-            break
         default:
-            result(nil)
+            result(FlutterMethodNotImplemented)
         }
     }
     
