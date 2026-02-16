@@ -59,7 +59,12 @@ class LocalAuthCryptoPlugin : FlutterPlugin, MethodCallHandler, ActivityAware {
                 val negativeButton = call.argument<String?>(LocalAuthArgs.BIO_NEGATIVE_BUTTON) ?: "Cancel"
 
                 try {
-                    val (cipher, encryptedData) = CryptoHelper.getDecryptCipher(cipherText, allowDeviceCredential)
+                    val useCryptoObject = !(allowDeviceCredential && Build.VERSION.SDK_INT < Build.VERSION_CODES.R)
+
+                    // Only init decrypt cipher when we need a CryptoObject
+                    val cipherPair = if (useCryptoObject) {
+                        CryptoHelper.getDecryptCipher(cipherText, allowDeviceCredential)
+                    } else null
 
                     val promptInfoBuilder = BiometricPrompt.PromptInfo.Builder()
                         .setTitle(title)
@@ -81,12 +86,12 @@ class LocalAuthCryptoPlugin : FlutterPlugin, MethodCallHandler, ActivityAware {
                     val callback = object : BiometricPrompt.AuthenticationCallback() {
                         override fun onAuthenticationSucceeded(authResult: BiometricPrompt.AuthenticationResult) {
                             try {
-                                val plainText = if (allowDeviceCredential && Build.VERSION.SDK_INT < Build.VERSION_CODES.R) {
+                                val plainText = if (!useCryptoObject) {
                                     // Pre-API 30 with credential: auth without CryptoObject, use time-based key
                                     CryptoHelper.decryptFromCipherText(cipherText, allowDeviceCredential)
                                 } else {
-                                    val authenticatedCipher = authResult.cryptoObject?.cipher ?: cipher
-                                    CryptoHelper.decrypt(authenticatedCipher, encryptedData)
+                                    val authenticatedCipher = authResult.cryptoObject?.cipher ?: cipherPair!!.first
+                                    CryptoHelper.decrypt(authenticatedCipher, cipherPair!!.second)
                                 }
                                 result.success(plainText)
                             } catch (e: Exception) {
@@ -110,15 +115,15 @@ class LocalAuthCryptoPlugin : FlutterPlugin, MethodCallHandler, ActivityAware {
 
                     val biometricPrompt = BiometricPrompt(currentActivity, executor, callback)
 
-                    if (allowDeviceCredential && Build.VERSION.SDK_INT < Build.VERSION_CODES.R) {
+                    if (useCryptoObject) {
+                        val cryptoObject = BiometricPrompt.CryptoObject(cipherPair!!.first)
+                        currentActivity.runOnUiThread {
+                            biometricPrompt.authenticate(promptInfo, cryptoObject)
+                        }
+                    } else {
                         // Pre-API 30: authenticate without CryptoObject
                         currentActivity.runOnUiThread {
                             biometricPrompt.authenticate(promptInfo)
-                        }
-                    } else {
-                        val cryptoObject = BiometricPrompt.CryptoObject(cipher)
-                        currentActivity.runOnUiThread {
-                            biometricPrompt.authenticate(promptInfo, cryptoObject)
                         }
                     }
                 } catch (e: Exception) {
