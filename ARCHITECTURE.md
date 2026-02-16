@@ -144,9 +144,15 @@ This is **asymmetric** encryption (unlike Android's symmetric AES). The private 
 
 **Decrypt** (`CryptoHelper.decrypt`):
 - Dispatched to `DispatchQueue.global(qos: .userInitiated)` (background queue)
+- Guards empty ciphertext and invalid base64 before attempting decryption
+- Base64 decode uses `.ignoreUnknownCharacters` to tolerate whitespace/newlines
 - Calls `SecKeyCreateDecryptedData` with the private key — **this triggers the OS biometric prompt** because the private key has access control
 - Result marshalled back to main thread via `DispatchQueue.main.async`
 - User cancellation detected by checking `LAError.userCancel` in the error domain
+
+**Auto-recovery:** Both `encrypt()` and `decrypt()` wrap their internal calls in try/catch. On any crypto failure (stale key, corrupt Keychain entry), the key is deleted via `deleteKey()` and the operation retries once. User cancellation and base64 validation errors skip retry.
+
+**CryptoError cases:** `base64DecodingFailed` (invalid base64 input), `utf8DecodingFailed` (decrypted bytes not valid UTF-8) — split for clear diagnosis.
 
 ### evaluatePolicy
 
@@ -167,7 +173,7 @@ This is **asymmetric** encryption (unlike Android's symmetric AES). The private 
 | **Ciphertext format** | `base64(rsa_ciphertext)`                 | `base64(ecies_blob)`                         |
 | **Credential fallback** | `BIOMETRIC_STRONG \| DEVICE_CREDENTIAL`| `.userPresence` access control               |
 | **Pre-API workaround**| API < 30: auth without CryptoObject      | N/A                                          |
-| **Key recovery**      | Auto-delete stale key + retry            | None (Secure Enclave keys survive)           |
+| **Key recovery**      | Auto-delete stale key + retry            | Auto-delete stale key + retry                |
 | **Simulator support** | Emulator with KeyStore                   | Software key (no Secure Enclave)             |
 
 ## Error Code Reference

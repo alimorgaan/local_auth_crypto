@@ -12,6 +12,16 @@ class CryptoHelper {
         return allowDeviceCredential ? keyTagCredential : keyTagBiometric
     }
 
+    private static func deleteKey(allowDeviceCredential: Bool) {
+        let tag = keyTag(allowDeviceCredential: allowDeviceCredential)
+        let query: [String: Any] = [
+            kSecClass as String: kSecClassKey,
+            kSecAttrApplicationTag as String: tag,
+            kSecAttrKeyType as String: kSecAttrKeyTypeECSECPrimeRandom
+        ]
+        SecItemDelete(query as CFDictionary)
+    }
+
     private static func getOrCreateKeyPair(allowDeviceCredential: Bool) throws -> SecKey {
         let tag = keyTag(allowDeviceCredential: allowDeviceCredential)
 
@@ -73,7 +83,7 @@ class CryptoHelper {
         return privateKey
     }
 
-    static func encrypt(plainText: String, allowDeviceCredential: Bool) throws -> String {
+    private static func encryptInternal(plainText: String, allowDeviceCredential: Bool) throws -> String {
         let privateKey = try getOrCreateKeyPair(allowDeviceCredential: allowDeviceCredential)
         guard let publicKey = SecKeyCopyPublicKey(privateKey) else {
             throw CryptoError.publicKeyUnavailable
@@ -95,10 +105,19 @@ class CryptoHelper {
         return (cipherData as Data).base64EncodedString()
     }
 
-    static func decrypt(
+    static func encrypt(plainText: String, allowDeviceCredential: Bool) throws -> String {
+        do {
+            return try encryptInternal(plainText: plainText, allowDeviceCredential: allowDeviceCredential)
+        } catch {
+            // Auto-recovery: delete stale key and retry once
+            deleteKey(allowDeviceCredential: allowDeviceCredential)
+            return try encryptInternal(plainText: plainText, allowDeviceCredential: allowDeviceCredential)
+        }
+    }
+
+    private static func decryptInternal(
         cipherText: String,
         allowDeviceCredential: Bool,
-        reason: String,
         completion: @escaping (Result<String, Error>) -> Void
     ) {
         DispatchQueue.global(qos: .userInitiated).async {
@@ -110,8 +129,13 @@ class CryptoHelper {
                     return
                 }
 
-                guard let cipherData = Data(base64Encoded: cipherText) else {
-                    completion(.failure(CryptoError.decodingFailed))
+                guard !cipherText.isEmpty else {
+                    completion(.failure(CryptoError.base64DecodingFailed))
+                    return
+                }
+
+                guard let cipherData = Data(base64Encoded: cipherText, options: .ignoreUnknownCharacters) else {
+                    completion(.failure(CryptoError.base64DecodingFailed))
                     return
                 }
 
@@ -129,7 +153,7 @@ class CryptoHelper {
                 }
 
                 guard let plainText = String(data: plainData as Data, encoding: .utf8) else {
-                    completion(.failure(CryptoError.decodingFailed))
+                    completion(.failure(CryptoError.utf8DecodingFailed))
                     return
                 }
 
@@ -140,12 +164,38 @@ class CryptoHelper {
         }
     }
 
-    enum CryptoError: Error {
+    static func decrypt(
+        cipherText: String,
+        allowDeviceCredential: Bool,
+        reason: String,
+        completion: @escaping (Result<String, Error>) -> Void
+    ) {
+        decryptInternal(cipherText: cipherText, allowDeviceCredential: allowDeviceCredential) { result in
+            switch result {
+            case .success:
+                completion(result)
+            case .failure(let error):
+                // Don't retry on user cancel or input validation errors
+                if error is CryptoError,
+                   let cryptoErr = error as? CryptoError,
+                   cryptoErr == .userCancelled || cryptoErr == .base64DecodingFailed {
+                    completion(result)
+                    return
+                }
+                // Auto-recovery: delete stale key and retry once
+                deleteKey(allowDeviceCredential: allowDeviceCredential)
+                decryptInternal(cipherText: cipherText, allowDeviceCredential: allowDeviceCredential, completion: completion)
+            }
+        }
+    }
+
+    enum CryptoError: Error, Equatable {
         case keyCreationFailed
         case publicKeyUnavailable
         case algorithmNotSupported
         case encodingFailed
-        case decodingFailed
+        case base64DecodingFailed
+        case utf8DecodingFailed
         case encryptionFailed
         case decryptionFailed
         case userCancelled
